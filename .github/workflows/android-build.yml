@@ -12,6 +12,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+
     steps:
       - name: Baixar projeto
         uses: actions/checkout@v4
@@ -27,21 +31,35 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Preparar Android
-        uses: android-actions/setup-android@v3
+      - name: Aceitar licencas Android
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager nao encontrado"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
 
-      - name: Instalar SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Instalar SDK Android
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Extrair e compilar
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' -print -quit)
           if [ -z "$ZIP_FILE" ]; then
-            echo "Arquivo ZIP não encontrado"
+            echo "Arquivo ZIP nao encontrado"
             exit 1
           fi
-          unzip "$ZIP_FILE" -d source
-          PROJECT_DIR=$(dirname "$(find source -name settings.gradle -print -quit)")
+          mkdir -p source
+          unzip -o "$ZIP_FILE" -d source
+          SETTINGS=$(find source -name settings.gradle -print -quit)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle nao encontrado"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$SETTINGS")
           cd "$PROJECT_DIR"
           gradle --no-daemon assembleDebug
 
@@ -50,4 +68,4 @@ jobs:
         with:
           name: reflexo-infinito-apk
           path: source/**/app/build/outputs/apk/debug/app-debug.apk
-          
+          if-no-files-found: error
